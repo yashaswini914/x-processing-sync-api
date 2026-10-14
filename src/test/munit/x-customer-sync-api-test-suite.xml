@@ -1,0 +1,1401 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+
+      xsi:schemaLocation="
+
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+
+      http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+
+      http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+
+      http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+
+      http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+
+      http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+
+
+    <munit:config name="x-customer-all-tests-config"/>
+
+
+
+    <!-- API ENTRY -->
+
+
+
+    <munit:test name="test-xapi-main">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="apikit:router">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'OK'}]"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <flow-ref name="x-customer-sync-api-main"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[payload.status]"
+
+                is="#[MunitTools::equalTo('OK')]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <munit:test name="test-xapi-console">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="apikit:console">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'OK'}]"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <flow-ref name="x-customer-sync-api-console"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[payload.status]"
+
+                is="#[MunitTools::equalTo('OK')]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- GET ALL CUSTOMERS -->
+
+
+
+    <munit:test name="test-get-all-customers">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload
+
+                        value="#[[{employeeId: 101, name: 'Alice'}]]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <flow-ref name="get:\customers:x-customer-sync-api-config"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[sizeOf(payload)]"
+
+                is="#[MunitTools::equalTo(1)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- GET CUSTOMER BY ID -->
+
+
+
+    <munit:test name="test-get-customer-by-id">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload
+
+                        value="#[{employeeId: 101, name: 'Alice'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:attributes value="#[{uriParams: {id: '101'}}]"/>
+
+            </munit:set-event>
+
+            <flow-ref name="get:\customers\(id):x-customer-sync-api-config"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[vars.customerId]"
+
+                is="#[MunitTools::equalTo(101)]"/>
+
+            <munit-tools:assert-that expression="#[payload.employeeId]"
+
+                is="#[MunitTools::equalTo(101)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- CREATE CUSTOMER - CORRECTED -->
+
+
+
+    <munit:test name="test-create-customer">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="flow-ref">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="check-employee-duplicate-flow"/>
+
+                </munit-tools:with-attributes>
+
+                <munit-tools:then-return/>
+
+            </munit-tools:mock-when>
+
+
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'ACCEPTED'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+
+
+            <munit-tools:mock-when processor="flow-ref">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="xapi-upsert-employee-salesforce-flow"/>
+
+                </munit-tools:with-attributes>
+
+                <munit-tools:then-return/>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:payload
+
+                    value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"
+
+                    mediaType="application/java"/>
+
+            </munit:set-event>
+
+            <flow-ref name="post:\customers:application\json:x-customer-sync-api-config"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[payload.status]"
+
+                is="#[MunitTools::equalTo('ACCEPTED')]"/>
+
+            <munit-tools:assert-that expression="#[vars.httpStatus]"
+
+                is="#[MunitTools::equalTo(202)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- UPDATE CUSTOMER - CORRECTED -->
+
+
+
+    <munit:test name="test-update-customer">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'ACCEPTED'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+            <munit-tools:mock-when processor="flow-ref">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="xapi-upsert-employee-salesforce-flow"/>
+
+                </munit-tools:with-attributes>
+
+                <munit-tools:then-return/>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:payload
+
+                    value="#[{name: 'Alice', address: 'Warangal', salary: 60000}]"
+
+                    mediaType="application/java"/>
+
+                <munit:attributes value="#[{uriParams: {id: '101'}}]"/>
+
+            </munit:set-event>
+
+            <flow-ref name="put:\customers\(id):application\json:x-customer-sync-api-config"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[payload.status]"
+
+                is="#[MunitTools::equalTo('ACCEPTED')]"/>
+
+            <munit-tools:assert-that expression="#[vars.customerId]"
+
+                is="#[MunitTools::equalTo(101)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- DELETE CUSTOMER -->
+
+
+
+    <munit:test name="test-delete-customer">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'ACCEPTED'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+            <munit-tools:mock-when processor="flow-ref">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="xapi-delete-employee-salesforce-flow"/>
+
+                </munit-tools:with-attributes>
+
+                <munit-tools:then-return/>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:attributes value="#[{uriParams: {id: '101'}}]"/>
+
+            </munit:set-event>
+
+            <flow-ref name="delete:\customers\(id):x-customer-sync-api-config"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[payload.status]"
+
+                is="#[MunitTools::equalTo('ACCEPTED')]"/>
+
+            <munit-tools:assert-that expression="#[vars.httpStatus]"
+
+                is="#[MunitTools::equalTo(202)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- VALIDATION -->
+
+
+
+    <munit:test name="test-valid-employee-request">
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="validate-employee-create-request-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+    <munit:test name="test-invalid-employee-id"
+
+        expectedErrorType="VALIDATION:MULTIPLE">
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: '', name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="validate-employee-create-request-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+    <munit:test name="test-invalid-employee-name"
+
+        expectedErrorType="VALIDATION:MULTIPLE">
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: '', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="validate-employee-create-request-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+    <munit:test name="test-invalid-employee-address"
+
+        expectedErrorType="VALIDATION:MULTIPLE">
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: '', salary: 50000}]"/>
+
+            <flow-ref name="validate-employee-create-request-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+    <munit:test name="test-invalid-employee-salary"
+
+        expectedErrorType="VALIDATION:MULTIPLE">
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: -100}]"/>
+
+            <flow-ref name="validate-employee-create-request-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+    <!-- DUPLICATE CHECK: NEW EMPLOYEE -->
+
+
+
+    <munit:test name="test-duplicate-check-new-employee">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:error typeId="HTTP:NOT_FOUND"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="check-employee-duplicate-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[vars.employeeExists]"
+
+                is="#[MunitTools::equalTo(false)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- DUPLICATE CHECK: EXISTS -->
+
+
+
+    <munit:test name="test-duplicate-check-existing-employee"
+
+        expectedErrorType="EMPLOYEE:ALREADY_EXISTS">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{employeeId: 101}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="check-employee-duplicate-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+    <!-- DUPLICATE CHECK: CONNECTIVITY -->
+
+
+
+    <munit:test name="test-duplicate-check-connectivity">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:error typeId="HTTP:CONNECTIVITY"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="check-employee-duplicate-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[vars.employeeExistenceUnknown]"
+
+                is="#[MunitTools::equalTo(true)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- SALESFORCE UPSERT -->
+
+
+
+    <munit:test name="test-salesforce-employee-upsert">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="salesforce:upsert">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[[{success: true, id: 'SF101'}]]"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeId" value="#[101]"/>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <flow-ref name="xapi-upsert-employee-salesforce-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:verify-call processor="salesforce:upsert" times="1"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- SALESFORCE DELETE: FOUND -->
+
+
+
+    <munit:test name="test-salesforce-employee-delete-found">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="salesforce:query">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[[{Id: 'SF101'}]]"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+            <munit-tools:mock-when processor="salesforce:delete">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[[{success: true}]]"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeId" value="#[101]"/>
+
+            <flow-ref name="xapi-delete-employee-salesforce-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:verify-call processor="salesforce:delete" times="1"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- SALESFORCE DELETE: NOT FOUND -->
+
+
+
+    <munit:test name="test-salesforce-employee-delete-not-found">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="salesforce:query">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[[]]"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeId" value="#[999]"/>
+
+            <flow-ref name="xapi-delete-employee-salesforce-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:verify-call processor="salesforce:delete" times="0"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- CDC CREATE -->
+
+
+
+    <munit:test name="test-salesforce-cdc-create">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="flow-ref">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="salesforce-to-papi-upsert-flow"/>
+
+                </munit-tools:with-attributes>
+
+                <munit-tools:then-return/>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:payload
+
+                    value="#[{data: {payload: {ChangeEventHeader: {changeType: 'CREATE', changeOrigin: 'external/client', recordIds: ['SF101']}}}}]"/>
+
+            </munit:set-event>
+
+            <flow-ref name="salesforce-employee-cdc-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[vars.changeType]"
+
+                is="#[MunitTools::equalTo('CREATE')]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- CDC DELETE -->
+
+
+
+    <munit:test name="test-salesforce-cdc-delete">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="flow-ref">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="salesforce-to-papi-delete-flow"/>
+
+                </munit-tools:with-attributes>
+
+                <munit-tools:then-return/>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:payload
+
+                    value="#[{data: {payload: {ChangeEventHeader: {changeType: 'DELETE', changeOrigin: 'external/client', recordIds: ['SF101']}}}}]"/>
+
+            </munit:set-event>
+
+            <flow-ref name="salesforce-employee-cdc-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[vars.changeType]"
+
+                is="#[MunitTools::equalTo('DELETE')]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- CDC SKIP ORIGIN -->
+
+
+
+    <munit:test name="test-salesforce-cdc-skip-mulesoft-origin">
+
+        <munit:execution>
+
+            <munit:set-event>
+
+                <munit:payload
+
+                    value="#[{data: {payload: {ChangeEventHeader: {changeType: 'UPDATE', changeOrigin: 'com/salesforce/api/soap/67.0', recordIds: ['SF101']}}}}]"/>
+
+            </munit:set-event>
+
+            <flow-ref name="salesforce-employee-cdc-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:verify-call processor="flow-ref" times="0">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="salesforce-to-papi-upsert-flow"/>
+
+                </munit-tools:with-attributes>
+
+            </munit-tools:verify-call>
+
+            <munit-tools:verify-call processor="flow-ref" times="0">
+
+                <munit-tools:with-attributes>
+
+                    <munit-tools:with-attribute attributeName="name"
+
+                        whereValue="salesforce-to-papi-delete-flow"/>
+
+                </munit-tools:with-attributes>
+
+            </munit-tools:verify-call>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- SALESFORCE TO PAPI UPSERT -->
+
+
+
+    <munit:test name="test-salesforce-to-papi-upsert">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="salesforce:query">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload
+
+                        value="#[[{Id: 'SF101', Employee_Id__c: 101, Name: 'Alice', Address__c: 'Hyderabad', Salary__c: 50000}]]"/>
+
+                    <munit-tools:variables>
+
+                        <munit-tools:variable key="sfRecords"
+
+                            value="#[[{Id: 'SF101', Employee_Id__c: 101, Name: 'Alice', Address__c: 'Hyderabad', Salary__c: 50000}]]"/>
+
+                    </munit-tools:variables>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'ACCEPTED'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="changeType" value="#['CREATE']"/>
+
+            <set-variable variableName="sfEvent"
+
+                value="#[{ChangeEventHeader: {recordIds: ['SF101']}}]"/>
+
+            <flow-ref name="salesforce-to-papi-upsert-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:verify-call processor="http:request" times="1"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- SALESFORCE TO PAPI DELETE -->
+
+
+
+    <munit:test name="test-salesforce-to-papi-delete">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="salesforce:query-all">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload
+
+                        value="#[[{Id: 'SF101', Employee_Id__c: 101, IsDeleted: true}]]"/>
+
+                    <munit-tools:variables>
+
+                        <munit-tools:variable key="deletedEmployeeRecords"
+
+                            value="#[[{Id: 'SF101', Employee_Id__c: 101, IsDeleted: true}]]"/>
+
+                    </munit-tools:variables>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'ACCEPTED'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="sfEvent"
+
+                value="#[{ChangeEventHeader: {recordIds: ['SF101']}}]"/>
+
+            <flow-ref name="salesforce-to-papi-delete-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:assert-that expression="#[vars.deletedEmployeeId]"
+
+                is="#[MunitTools::equalTo(101)]"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- DUPLICATE REJECTION PUBLISH -->
+
+
+
+    <munit:test name="test-publish-duplicate-rejection">
+
+        <munit:behavior>
+
+            <munit-tools:mock-when processor="http:request">
+
+                <munit-tools:then-return>
+
+                    <munit-tools:payload value="#[{status: 'ACCEPTED'}]"
+
+                        mediaType="application/java"/>
+
+                </munit-tools:then-return>
+
+            </munit-tools:mock-when>
+
+        </munit:behavior>
+
+        <munit:execution>
+
+            <set-variable variableName="employeeId" value="#['101']"/>
+
+            <set-variable variableName="employeeRequest"
+
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+
+            <set-variable variableName="duplicateErrorDescription"
+
+                value="#['Employee already exists']"/>
+
+            <flow-ref name="publish-duplicate-rejection-flow"/>
+
+        </munit:execution>
+
+        <munit:validation>
+
+            <munit-tools:verify-call processor="http:request" times="1"/>
+
+        </munit:validation>
+
+    </munit:test>
+
+
+
+    <!-- ERROR RESPONSE BUILDER -->
+
+
+
+    <munit:test name="test-build-xapi-error-response">
+
+        <munit:execution>
+
+            <set-variable variableName="httpStatus" value="#[500]"/>
+
+            <flow-ref name="build-xapi-error-response-flow"/>
+
+        </munit:execution>
+
+    </munit:test>
+
+
+
+<!-- Cover Salesforce upsert when employee lookup returns no records -->
+
+
+
+<munit:test
+
+    name="test-salesforce-to-papi-upsert-record-not-found"
+
+    description="Verify synchronization failure when Salesforce returns no employee records"
+
+    expectedErrorType="APP:SYNC_FAILED">
+
+
+
+    <munit:behavior>
+
+
+
+        <munit-tools:mock-when processor="salesforce:query">
+
+            <munit-tools:with-attributes>
+
+                <munit-tools:with-attribute
+
+                    attributeName="doc:name"
+
+                    whereValue="Retrieve Salesforce Employee Details"/>
+
+            </munit-tools:with-attributes>
+
+
+
+            <munit-tools:then-return>
+
+                <munit-tools:payload
+
+                    value="#[[]]"
+
+                    mediaType="application/java"/>
+
+
+
+                <munit-tools:variables>
+
+                    <munit-tools:variable
+
+                        key="sfRecords"
+
+                        value="#[[]]"/>
+
+                </munit-tools:variables>
+
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+
+
+    </munit:behavior>
+
+
+
+    <munit:execution>
+
+
+
+        <set-variable
+
+            variableName="changeType"
+
+            value="#['CREATE']"/>
+
+
+
+        <set-variable
+
+            variableName="sfEvent"
+
+            value="#[{ChangeEventHeader: {recordIds: ['SF999']}}]"/>
+
+
+
+        <flow-ref name="salesforce-to-papi-upsert-flow"/>
+
+
+
+    </munit:execution>
+
+
+
+</munit:test>
+
+
+
+<!-- Console APIKIT:NOT_FOUND error handling -->
+
+
+
+<munit:test
+
+    name="test-xapi-console-not-found-error"
+
+    description="Cover APIKit console not found error handler"
+
+    expectedErrorType="APIKIT:NOT_FOUND">
+
+
+
+    <munit:behavior>
+
+
+
+        <munit-tools:mock-when processor="apikit:console">
+
+            <munit-tools:then-return>
+
+                <munit-tools:error typeId="APIKIT:NOT_FOUND"/>
+
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+
+
+    </munit:behavior>
+
+
+
+    <munit:execution>
+
+        <flow-ref name="x-customer-sync-api-console"/>
+
+    </munit:execution>
+
+
+
+    <munit:validation>
+
+        <munit-tools:assert-that
+
+            expression="#[vars.httpStatus]"
+
+            is="#[MunitTools::equalTo(404)]"/>
+
+    </munit:validation>
+
+
+
+</munit:test>
+
+
+
+<!-- Salesforce CDC delete with missing employee ID -->
+
+
+
+<munit:test
+
+    name="test-salesforce-to-papi-delete-missing-employee"
+
+    description="Cover missing employee ID synchronization failure"
+
+    expectedErrorType="APP:SYNC_FAILED">
+
+
+
+    <munit:behavior>
+
+
+
+        <munit-tools:mock-when processor="salesforce:query-all">
+
+            <munit-tools:with-attributes>
+
+                <munit-tools:with-attribute
+
+                    attributeName="doc:name"
+
+                    whereValue="Retrieve Deleted Salesforce Employee"/>
+
+            </munit-tools:with-attributes>
+
+
+
+            <munit-tools:then-return>
+
+                <munit-tools:payload
+
+                    value="#[[]]"
+
+                    mediaType="application/java"/>
+
+
+
+                <munit-tools:variables>
+
+                    <munit-tools:variable
+
+                        key="deletedEmployeeRecords"
+
+                        value="#[[]]"/>
+
+                </munit-tools:variables>
+
+            </munit-tools:then-return>
+
+        </munit-tools:mock-when>
+
+
+
+    </munit:behavior>
+
+
+
+    <munit:execution>
+
+
+
+        <set-variable
+
+            variableName="sfEvent"
+
+            value="#[{ChangeEventHeader: {recordIds: ['SF999']}}]"/>
+
+
+
+        <flow-ref name="salesforce-to-papi-delete-flow"/>
+
+
+
+    </munit:execution>
+
+
+
+</munit:test>
+
+
+
+
+
+
+    <!-- Additional global error-handler coverage: production flows remain unchanged. -->
+    <flow name="munit-trigger-employee-already-exists">
+        <raise-error type="EMPLOYEE:ALREADY_EXISTS" description="Employee already exists"/>
+        <error-handler ref="XAPI_Global_Error_Handler"/>
+    </flow>
+
+    <flow name="munit-trigger-sync-failed">
+        <raise-error type="APP:SYNC_FAILED" description="Employee synchronization failed"/>
+        <error-handler ref="XAPI_Global_Error_Handler"/>
+    </flow>
+
+    <flow name="munit-trigger-unexpected-error">
+        <raise-error type="TEST:UNEXPECTED" description="Unexpected test failure"/>
+        <error-handler ref="XAPI_Global_Error_Handler"/>
+    </flow>
+
+    <munit:test name="test-global-employee-already-exists"
+                expectedErrorType="EMPLOYEE:ALREADY_EXISTS">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="name"
+                        whereValue="publish-duplicate-rejection-flow"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return/>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-variable variableName="employeeId" value="#[101]"/>
+            <set-variable variableName="employeeRequest"
+                value="#[{employeeId: 101, name: 'Alice', address: 'Hyderabad', salary: 50000}]"/>
+            <flow-ref name="munit-trigger-employee-already-exists"/>
+        </munit:execution>
+    </munit:test>
+
+    <munit:test name="test-global-app-sync-failed"
+                expectedErrorType="APP:SYNC_FAILED">
+        <munit:execution>
+            <flow-ref name="munit-trigger-sync-failed"/>
+        </munit:execution>
+    </munit:test>
+
+    <munit:test name="test-global-unexpected-error"
+                expectedErrorType="TEST:UNEXPECTED">
+        <munit:execution>
+            <flow-ref name="munit-trigger-unexpected-error"/>
+        </munit:execution>
+    </munit:test>
+
+</mule>

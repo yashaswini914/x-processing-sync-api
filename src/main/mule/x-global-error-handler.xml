@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <error-handler name="XAPI_Global_Error_Handler">
+
+        <!-- Customer already exists -->
+
+
+        <!-- RAML and request validation errors -->
+
+        
+
+<on-error-propagate
+    doc:name="Handle Employee Already Exists"
+    type="EMPLOYEE:ALREADY_EXISTS">
+
+    <set-variable
+        doc:name="Store Duplicate Error Description"
+        variableName="duplicateErrorDescription"
+        value="#[error.description]"/>
+
+    <set-variable
+        doc:name="Set HTTP Status 409"
+        variableName="httpStatus"
+        value="#[409]"/>
+
+    <flow-ref
+        doc:name="Publish Duplicate Rejection"
+        name="publish-duplicate-rejection-flow"/>
+
+    <ee:transform doc:name="Build Duplicate Employee Error Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "EMP-409",
+    message: vars.duplicateErrorDescription,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+</on-error-propagate>
+
+
+<on-error-propagate
+    doc:name="Handle APIKit Bad Request"
+    type="APIKIT:BAD_REQUEST">
+
+    <set-variable
+        doc:name="Set HTTP Status 400"
+        variableName="httpStatus"
+        value="#[400]"/>
+
+    <ee:transform doc:name="Build Bad Request Error Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "EMP-400",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+</on-error-propagate>
+
+
+
+        <!-- Mule Validation module errors -->
+
+        
+<on-error-propagate
+    doc:name="Handle Validation Errors"
+    type="VALIDATION:*">
+
+    <set-variable
+        doc:name="Set HTTP Status 400"
+        variableName="httpStatus"
+        value="#[400]"/>
+
+    <ee:transform doc:name="Build Validation Error Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "EMP-400",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+</on-error-propagate>
+
+
+
+        <!-- Incorrect XAPI URL -->
+
+        <on-error-propagate
+            doc:name="Handle Resource Not Found"
+            type="APIKIT:NOT_FOUND">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 404"
+                variableName="httpStatus"
+                value="#[404]"/>
+
+            <ee:transform doc:name="Build Resource Not Found Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-404",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+
+
+        <!-- Customer not found in PAPI -->
+
+        <on-error-propagate
+            doc:name="Handle Customer Not Found"
+            type="HTTP:NOT_FOUND">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 404"
+                variableName="httpStatus"
+                value="#[404]"/>
+
+            <ee:transform doc:name="Build Customer Not Found Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-404",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+
+
+        <!-- Unsupported HTTP method -->
+
+        <on-error-propagate
+            doc:name="Handle Method Not Allowed"
+            type="APIKIT:METHOD_NOT_ALLOWED">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 405"
+                variableName="httpStatus"
+                value="#[405]"/>
+
+            <ee:transform doc:name="Build Method Not Allowed Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-405",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+
+
+        <!-- Unsupported content type -->
+
+        <on-error-propagate
+            doc:name="Handle Unsupported Media Type"
+            type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 415"
+                variableName="httpStatus"
+                value="#[415]"/>
+
+            <ee:transform doc:name="Build Unsupported Media Type Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-415",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+
+
+        <!-- PAPI unavailable -->
+
+        <on-error-propagate
+            doc:name="Handle Process API Connectivity Error"
+            type="HTTP:CONNECTIVITY">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 503"
+                variableName="httpStatus"
+                value="#[503]"/>
+
+         
+<ee:transform doc:name="Build Process API Connectivity Error Response">
+    <ee:message>
+        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "EMP-503",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+    </ee:message>
+</ee:transform>
+
+
+        </on-error-propagate>
+
+
+        <!-- PAPI timeout -->
+
+        <on-error-propagate
+            doc:name="Handle Process API Timeout"
+            type="HTTP:TIMEOUT">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 504"
+                variableName="httpStatus"
+                value="#[504]"/>
+
+            <ee:transform doc:name="Build Process API Timeout Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-504",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+
+
+        <!-- Other downstream HTTP failures -->
+
+        <on-error-propagate
+            doc:name="Handle Downstream HTTP Errors"
+            type="HTTP:*">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 502"
+                variableName="httpStatus"
+                value="#[502]"/>
+
+            <ee:transform doc:name="Build Downstream HTTP Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-502",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+        
+<!-- ============================================== -->
+<!-- SALESFORCE CONNECTOR ERRORS                    -->
+<!-- ============================================== -->
+
+<on-error-propagate
+    doc:name="Handle Salesforce Connector Errors"
+    type="SALESFORCE:*"
+    logException="true">
+
+    <set-variable
+        doc:name="Set HTTP Status 502"
+        variableName="httpStatus"
+        value="#[502]"/>
+
+    <set-variable
+        doc:name="Set Salesforce Error Code"
+        variableName="errorCode"
+        value="SF-502"/>
+
+    <set-variable
+        doc:name="Set Safe Error Message"
+        variableName="errorMessage"
+        value="Salesforce integration failed"/>
+
+    <flow-ref
+        doc:name="Build Salesforce Error Response"
+        name="build-xapi-error-response-flow"/>
+
+</on-error-propagate>
+
+
+<!-- ============================================== -->
+<!-- EMPLOYEE SYNCHRONIZATION ERRORS                -->
+<!-- ============================================== -->
+
+<on-error-propagate
+    doc:name="Handle Employee Synchronization Failure"
+    type="APP:SYNC_FAILED"
+    logException="true">
+
+    <set-variable
+        doc:name="Set HTTP Status 500"
+        variableName="httpStatus"
+        value="#[500]"/>
+
+    <set-variable
+        doc:name="Set Synchronization Error Code"
+        variableName="errorCode"
+        value="SYNC-500"/>
+
+    <set-variable
+        doc:name="Set Safe Error Message"
+        variableName="errorMessage"
+        value="Employee synchronization failed"/>
+
+    <flow-ref
+        doc:name="Build Synchronization Error Response"
+        name="build-xapi-error-response-flow"/>
+
+</on-error-propagate>
+        
+
+
+        <!-- Unexpected errors -->
+
+        <on-error-propagate
+            doc:name="Handle Unexpected Errors"
+            type="ANY"
+            logException="true">
+
+            <set-variable
+                doc:name="Set HTTP Status Code 500"
+                variableName="httpStatus"
+                value="#[500]"/>
+
+            <ee:transform doc:name="Build Internal Server Error Response">
+                <ee:message>
+                    <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: "CUST-500",
+    message: error.description,
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: p("app.name")
+}
+]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+
+        </on-error-propagate>
+
+    </error-handler>
+    
+<sub-flow
+    name="build-xapi-error-response-flow"
+    doc:name="Build Standard XAPI Error Response">
+
+    <ee:transform
+        doc:name="Transform Error to Standard JSON">
+
+        <ee:message>
+            <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    status: "ERROR",
+    errorCode: vars.errorCode default "EMP-500",
+    message: vars.errorMessage default "Request processing failed",
+    correlationId: correlationId,
+    timestamp: now() as String,
+    apiName: "x-customer-sync-api"
+}
+            ]]></ee:set-payload>
+        </ee:message>
+
+    </ee:transform>
+
+    <logger
+        doc:name="Log XAPI Integration Error"
+        level="ERROR"
+        message="XAPI Salesforce integration or synchronization failed"/>
+
+</sub-flow>
+    
+
+</mule>

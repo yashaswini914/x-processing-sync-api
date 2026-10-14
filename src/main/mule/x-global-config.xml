@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/validation
+http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd" xmlns:validation="http://www.mulesoft.org/schema/mule/validation">
+    <http:listener-config name="x-customer-sync-api-httpListenerConfig">
+        <http:listener-connection host="${http.host}" port="${http.port}" />
+    </http:listener-config>
+    <apikit:config name="x-customer-sync-api-config" api="resource::64bf67c7-37b5-45e5-a0ea-95fa6c0a7682:x-customer-sync-api:1.0.0:raml:zip:x-customer-sync-api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+    <configuration-properties doc:name="Configuration properties" doc:id="6e21b5bc-e417-4c09-9863-d758f4356f00" file="properties/dev.yaml" />
+    <http:request-config
+    name="process-api-http-request-config"
+    doc:name="Process API HTTP Request Configuration">
+    
+
+    <http:request-connection
+        host="${processApi.host}"
+        port="${processApi.port}" protocol="HTTPS"/>
+        
+
+</http:request-config>
+
+<validation:config name="employee-validation-config"/>
+<configuration
+    doc:name="Customer Sync API Global Configuration"
+    defaultErrorHandler-ref="XAPI_Global_Error_Handler"/>
+
+
+	<os:object-store name="Salesforce_Object_store" doc:name="Object store" doc:id="27af3d34-e4d2-4d7d-9c73-777efd428728" />
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="77e2f051-8919-45e5-80f3-7e4b5867df5f" >
+		<salesforce:oauth-client-credentials-connection >
+			<salesforce:oauth-client-credentials clientId="${salesforce.clientId}" clientSecret="${salesforce.clientSecret}" tokenUrl="${salesforce.tokenUrl}" />
+			<salesforce:oauth-store-config objectStore="Salesforce_Object_store" />
+		</salesforce:oauth-client-credentials-connection>
+	</salesforce:sfdc-config>
+
+
+</mule>

@@ -1,0 +1,437 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/salesforce
+        http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+
+
+    <flow name="salesforce-employee-cdc-flow"
+          doc:name="Salesforce Employee Change Data Capture Flow">
+
+        <salesforce:replay-channel-listener
+            doc:name="Listen for Salesforce Employee Changes"
+            config-ref="Salesforce_Config"
+            streamingChannel="/data/Employee__ChangeEvent"
+            replayOption="ONLY_NEW"/>
+
+        <logger
+            doc:name="Log Salesforce Employee Change Received"
+            level="INFO"
+            message="Salesforce employee change event received"/>
+
+        <set-variable
+            doc:name="Store Salesforce Change Event"
+            variableName="sfEvent"
+            value="#[payload.data.payload]"/>
+
+        <set-variable
+            doc:name="Extract Salesforce Change Type"
+            variableName="changeType"
+            value="#[vars.sfEvent.ChangeEventHeader.changeType]"/>
+            
+         <logger
+    level="INFO"
+    doc:name="Log Salesforce CDC Origin"
+    message="#['CDC ORIGIN | changeType=' ++
+        (vars.changeType default 'UNKNOWN') ++
+        ' | changeOrigin=' ++
+        ((vars.sfEvent.ChangeEventHeader.changeOrigin default 'EMPTY') as String) ++
+        ' | commitUser=' ++
+        ((vars.sfEvent.ChangeEventHeader.commitUser default 'EMPTY') as String) ++
+        ' | recordIds=' ++
+        write(vars.sfEvent.ChangeEventHeader.recordIds default [], 'application/json')]"/>
+
+        <choice doc:name="Route Salesforce Employee Change">
+        
+<when expression="#[
+    (vars.sfEvent.ChangeEventHeader.changeOrigin default '')
+        startsWith 'com/salesforce/api/soap/67.0'
+]">
+    <logger
+        level="INFO"
+        doc:name="Log Skipped CDC"
+        message="#['Skipping MuleSoft CDC event | changeOrigin=' ++
+            (vars.sfEvent.ChangeEventHeader.changeOrigin default '')]"/>
+</when>
+
+    <when expression="#[vars.changeType == 'CREATE' or vars.changeType == 'UPDATE']">
+        <flow-ref name="salesforce-to-papi-upsert-flow"/>
+    </when>
+
+    <when expression="#[vars.changeType == 'DELETE']">
+        <flow-ref name="salesforce-to-papi-delete-flow"/>
+    </when>
+
+    <otherwise>
+        <logger
+            level="INFO"
+            message="Salesforce change type ignored"/>
+    </otherwise>
+
+</choice>
+
+        <error-handler ref="XAPI_Global_Error_Handler"/>
+
+    </flow>
+
+    <sub-flow name="salesforce-to-papi-upsert-flow"
+              doc:name="Salesforce Employee Upsert to PAPI Flow">
+
+        <set-variable
+            doc:name="Extract Salesforce Employee Record ID"
+            variableName="sfRecordId"
+            value="#[vars.sfEvent.ChangeEventHeader.recordIds[0]]"/>
+
+<salesforce:query
+    doc:name="Retrieve Salesforce Employee Details"
+    config-ref="Salesforce_Config"
+    target="sfRecords">
+
+    <salesforce:salesforce-query><![CDATA[
+        SELECT Id,
+               Employee_Id__c,
+               Name,
+               Address__c,
+               Salary__c
+        FROM Employee__c
+        WHERE Id = ':recordId'
+    ]]></salesforce:salesforce-query>
+
+    <salesforce:parameters><![CDATA[#[{recordId: vars.sfRecordId}]]]></salesforce:parameters>
+
+</salesforce:query>
+
+
+
+        <choice doc:name="Validate Salesforce Employee Lookup">
+
+            <when expression="#[isEmpty(vars.sfRecords)]">
+
+                <raise-error
+                    doc:name="Raise Employee Synchronization Failure"
+                    type="APP:SYNC_FAILED"
+                    description="Salesforce employee record could not be retrieved"/>
+
+            </when>
+
+        </choice>
+
+        <set-variable
+            doc:name="Store Salesforce Employee Details"
+            variableName="employee"
+            value="#[vars.sfRecords[0]]"/>
+
+        <ee:transform doc:name="Transform Salesforce Employee to PAPI Order">
+
+            <ee:message>
+
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    operation:
+        if (vars.changeType == "CREATE")
+            "New"
+        else
+            "Update",
+    data: [
+        {
+            employeeId: vars.employee.Employee_Id__c as Number,
+            name: vars.employee.Name,
+            address: vars.employee.Address__c,
+            salary: vars.employee.Salary__c as Number
+        }
+    ]
+}
+                ]]></ee:set-payload>
+
+            </ee:message>
+
+        </ee:transform>
+
+        <http:request
+            doc:name="Submit Employee Upsert Order to PAPI"
+            config-ref="process-api-http-request-config"
+            method="POST"
+            path="/api/orders"/>
+
+        <logger
+            doc:name="Log Employee Upsert Order Submission"
+            level="INFO"
+            message="Salesforce employee upsert order submitted to PAPI"/>
+
+    </sub-flow>
+
+    <sub-flow name="salesforce-to-papi-delete-flow"
+          doc:name="Salesforce Employee Delete to PAPI Flow">
+
+    <!-- Step 1: Extract Salesforce record ID from CDC event -->
+    <set-variable
+        doc:name="Extract Deleted Salesforce Record ID"
+        variableName="sfRecordId"
+        value="#[vars.sfEvent.ChangeEventHeader.recordIds[0]]"/>
+
+    <!-- Step 2: Query Salesforce, including soft-deleted records -->
+    <salesforce:query-all
+        doc:name="Retrieve Deleted Salesforce Employee"
+        config-ref="Salesforce_Config"
+        target="deletedEmployeeRecords">
+
+        <salesforce:salesforce-query><![CDATA[
+            SELECT Id, Employee_Id__c, IsDeleted
+            FROM Employee__c
+            WHERE Id = ':recordId'
+        ]]></salesforce:salesforce-query>
+
+        <salesforce:parameters><![CDATA[#[{
+            recordId: vars.sfRecordId
+        }]]]></salesforce:parameters>
+
+    </salesforce:query-all>
+
+    <!-- Step 3: Extract business employee ID -->
+    <set-variable
+        doc:name="Extract Deleted Employee ID"
+        variableName="deletedEmployeeId"
+        value="#[
+            if (isEmpty(vars.deletedEmployeeRecords default []))
+                null
+            else
+                vars.deletedEmployeeRecords[0].Employee_Id__c
+        ]"/>
+
+    <!-- Step 4: Validate employee ID -->
+    <choice doc:name="Validate Employee ID for Deletion">
+
+        <when expression="#[vars.deletedEmployeeId == null]">
+
+            <raise-error
+                doc:name="Raise Missing Employee ID Error"
+                type="APP:SYNC_FAILED"
+                description="Employee ID unavailable in Salesforce delete event"/>
+
+        </when>
+
+    </choice>
+
+    <!-- Step 5: Build DELETE order for PAPI -->
+    <ee:transform doc:name="Transform Salesforce Delete to PAPI Order">
+
+        <ee:message>
+
+            <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    operation: "Delete",
+    data: [
+        {
+            employeeId: vars.deletedEmployeeId as Number
+        }
+    ]
+}
+            ]]></ee:set-payload>
+
+        </ee:message>
+
+    </ee:transform>
+
+    <!-- Step 6: Submit DELETE order to PAPI -->
+    <http:request
+        doc:name="Submit Employee Delete Order to PAPI"
+        config-ref="process-api-http-request-config"
+        method="POST"
+        path="/api/orders"/>
+
+    <logger
+        doc:name="Log Employee Delete Order Submission"
+        level="INFO"
+        message="Salesforce employee delete order submitted to PAPI"/>
+
+</sub-flow>
+
+
+    <sub-flow name="xapi-upsert-employee-salesforce-flow"
+              doc:name="XAPI Employee Upsert to Salesforce Flow">
+
+        <ee:transform doc:name="Transform Employee Request to Salesforce Record">
+
+            <ee:message>
+
+                <ee:set-payload><![CDATA[
+%dw 2.0
+output application/java
+---
+[
+    {
+        Employee_Id__c: vars.employeeId as Number,
+        Name: vars.employeeRequest.name,
+        Address__c: vars.employeeRequest.address,
+        Salary__c: vars.employeeRequest.salary as Number
+    }
+]
+                ]]></ee:set-payload>
+
+            </ee:message>
+
+        </ee:transform>
+
+        <salesforce:upsert
+            doc:name="Upsert Employee Record in Salesforce"
+            config-ref="Salesforce_Config"
+            externalIdFieldName="Employee_Id__c" objectType="Employee__c"/>
+
+        <logger
+            doc:name="Log Salesforce Employee Upsert Result"
+            level="INFO"
+            message="Salesforce employee upsert operation executed"/>
+
+    </sub-flow>
+
+
+    <sub-flow name="xapi-delete-employee-salesforce-flow"
+              doc:name="XAPI Employee Delete from Salesforce Flow">
+
+        <salesforce:query
+            doc:name="Find Salesforce Employee by External ID"
+            config-ref="Salesforce_Config">
+
+            <salesforce:salesforce-query><![CDATA[
+                SELECT Id
+                FROM Employee__c
+                WHERE Employee_Id__c = :employeeId
+            ]]></salesforce:salesforce-query>
+
+            <salesforce:parameters><![CDATA[#[{
+    employeeId: vars.employeeId as Number
+}]]]></salesforce:parameters>
+
+        </salesforce:query>
+       <logger
+    level="INFO"
+    doc:name="Log Salesforce Delete Lookup"
+    message="#['Salesforce delete lookup | employeeId=' ++
+        (vars.employeeId as String) ++
+        ' | records=' ++ write(payload, 'application/json')]"/>
+
+        <choice doc:name="Check Salesforce Employee Existence">
+
+            <when expression="#[!isEmpty(payload)]">
+
+                <ee:transform doc:name="Extract Salesforce Record IDs for Deletion">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/java
+---
+payload map ((record) -> record.Id as String)
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+                <logger
+    level="INFO"
+    doc:name="Log Salesforce IDs For Deletion"
+    message="#['Salesforce IDs to delete: ' ++ write(payload, 'application/json')]"/>
+
+                <salesforce:delete
+                    doc:name="Delete Employee Record from Salesforce"
+                    config-ref="Salesforce_Config"/>
+
+               <logger
+    level="INFO"
+    doc:name="Log Salesforce Delete Result"
+    message="#['Salesforce delete result: ' ++ write(payload, 'application/json')]"/>
+
+            </when>
+
+            <otherwise>
+
+                <logger
+                    doc:name="Log Salesforce Employee Not Found"
+                    level="INFO"
+                    message="Employee record not found in Salesforce"/>
+
+            </otherwise>
+
+        </choice>
+        
+
+    </sub-flow>
+	<sub-flow name="validate-employee-create-request-flow" doc:id="65e1cbff-d7eb-4b9f-8f45-f82ba6089e98" >
+		<validation:all doc:name="All" doc:id="7a4942a7-ba1a-4d3a-af13-6a580c1981af" >
+			<validation:is-true doc:name="Validate Employee ID" doc:id="0da394c5-5ed6-4724-8612-9f0d7b758031" config-ref="employee-validation-config" expression="#[!isEmpty(trim((vars.employeeRequest.employeeId default '') as String))]" message="Employee ID is mandatory" />
+			<validation:is-true doc:name="Validate Employee Name" doc:id="f7624a56-594e-40f3-a529-0215e18f847c" config-ref="employee-validation-config" expression="#[!isEmpty(trim((vars.employeeRequest.name default '') as String))]" message="Employee name is mandatory" />
+			<validation:is-true doc:name="Validate Employee Address" doc:id="37a10bf7-d36d-4e17-a5b2-4a845b3f9366" config-ref="employee-validation-config" expression="#[!isEmpty(trim((vars.employeeRequest.address default '') as String))]" message="Employee address is mandatory" />
+			<validation:is-true doc:name="Validate Employee Salary" doc:id="2058e6fb-af40-452c-a5c1-a16bbd81050c" config-ref="employee-validation-config" expression="#[vars.employeeRequest.salary is Number and vars.employeeRequest.salary &gt;= 0]" message="Employee salary must be a non-negative number" />
+		</validation:all>
+	</sub-flow>
+	<sub-flow name="check-employee-duplicate-flow" doc:id="ec02e39c-9755-4300-8620-18084fe8962d" >
+		<set-variable value="#[vars.employeeRequest.employeeId as String]" doc:name="Set Employee ID" doc:id="a2f0ff73-d1fd-4704-9d04-6611fda3a6db" variableName="employeeId" />
+		<set-variable value="#[false]" doc:name="Initialize Employee Exists" doc:id="f11b5fa7-6fe4-4828-91b9-8f70be3c894c" variableName="employeeExists" />
+		<try doc:name="Check Employee Existence" doc:id="c55cb5bd-c172-44f2-88f9-1406a823ba37" >
+			<http:request method="GET" doc:name="Get Employee By ID" doc:id="3c1c2170-1f4e-4747-a070-44b8be1322f3" config-ref="process-api-http-request-config" path="#['/api/employees/' ++ vars.employeeId]" />
+			<set-variable value="#[true]" doc:name="Set Employee Exists" doc:id="adc36947-7429-4be3-aa02-34c657182147" variableName="employeeExists" />
+			<error-handler >
+
+    <!-- Employee does not exist -->
+    <on-error-continue
+        type="HTTP:NOT_FOUND"
+        doc:name="Handle Employee Not Found">
+
+        <set-variable
+            variableName="employeeExists"
+            value="#[false]"/>
+
+    </on-error-continue>
+
+    <!-- SAPI or database unavailable -->
+    <on-error-continue
+        type="HTTP:CONNECTIVITY, HTTP:TIMEOUT, HTTP:SERVICE_UNAVAILABLE"
+        doc:name="Allow Queueing During Connectivity Failure">
+
+        <set-variable
+            variableName="employeeExists"
+            value="#[false]"/>
+
+       <set-variable
+    variableName="employeeExistenceUnknown"
+    value="#[true]"
+    doc:name="Initialize Employee Existence Unknown"/>
+
+        <logger
+            level="WARN"
+            message="Employee existence could not be verified. Request will proceed to JMS."/>
+
+    </on-error-continue>
+
+</error-handler>
+		</try>
+		<choice doc:name="Check Duplicate Employee" doc:id="4d6b94b5-9c48-40e7-a224-d997d5698b3c" >
+			<when expression="#[vars.employeeExists]" >
+				<raise-error doc:name="Raise Employee Already Exists" doc:id="47899e82-0751-4e4b-95f0-e4d9231ccc7d" type="EMPLOYEE:ALREADY_EXISTS" description="#['Employee with ID ' ++ vars.employeeId ++ ' already exists']" />
+			</when>
+		</choice>
+	</sub-flow>
+
+
+</mule>

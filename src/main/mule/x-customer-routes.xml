@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<flow name="put:\customers\(id):application\json:x-customer-sync-api-config" doc:id="baccc58e-0208-46b1-8760-5d9feb637720" >
+		<set-variable value="#[attributes.uriParams.id as Number]" doc:name="Set Customer Identifier" doc:id="0c087a46-c907-493a-9fc9-22bd1f8d9a95" variableName="customerId" />
+		<logger level="INFO" doc:name="Log Customer Update Request Received" doc:id="d7985b88-80bd-49a1-9644-2b755331c3af" message="customer update request received" />
+		<set-variable value="#[payload]" doc:name="Set Original Customer Request" doc:id="cbc1c18b-53ea-43dd-a289-5410f7186390" variableName="originalCustomerRequest" />
+		<ee:transform doc:name="Transform Customer Update Request To Order Request" doc:id="1b1ca7c6-149c-45e8-bdd5-f96db39eaa93" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    operation: "Update",
+    data: [
+        {
+            employeeId: vars.customerId,
+            name: payload.name,
+            address: payload.address default null,
+            salary: payload.salary
+        }
+    ]
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Customer Update Process Request" doc:id="b0db5a9b-8087-470d-982c-293f8d6dc88e" message="Submitting customer update request to Process API" />
+		<http:request method="POST" doc:name="Submit Customer Update Request To Process API" doc:id="57b9cbb9-f491-4e60-9167-96e7fa93f9f9" config-ref="process-api-http-request-config" path="/api/orders" />
+		<set-variable value="#[vars.customerId]" doc:name="Set Salesforce Employee ID" doc:id="42e0a4cd-ffe1-4999-93bc-cda24f1e4a55" variableName="employeeId" />
+		<set-variable value="#[vars.originalCustomerRequest]" doc:name="Set Salesforce Employee Request" doc:id="53b660cc-3f1e-4998-8c9a-096c78266dd7" variableName="employeeRequest" />
+		<flow-ref doc:name="Update Employee In Salesforce" doc:id="58231a9b-0540-497e-ae54-28f7411c3d85" name="xapi-upsert-employee-salesforce-flow" />
+		<ee:transform doc:name="Employee Request Submission Successful" doc:id="2ea82e87-4b7c-48e3-92ef-05c2c6b8c4e0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    status: "ACCEPTED",
+    message: "Employee request submitted for processing",
+    employeeId: vars.employeeId
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[202]" doc:name="Set Accepted HTTP Status" doc:id="22464ee7-d820-4fa5-a6c1-df1bb2aa4d89" variableName="httpStatus" />
+		<logger level="INFO" doc:name="Log Customer Update Request Accepted" doc:id="60131a11-fd2e-4b26-bc59-84137e8f7e9d" message="Customer update request accepted for asynchronous processing" />
+	</flow>
+	<flow name="delete:\customers\(id):x-customer-sync-api-config" doc:id="7fa9621f-8af6-4b92-a9a5-c8331f1b3eb5" >
+		<set-variable value="#[attributes.uriParams.id as Number]" doc:name="Set Customer Identifier" doc:id="27b959b2-a1f2-418c-b0c5-5f0e25dbd02a" variableName="customerId" />
+		<logger level="INFO" doc:name="Log Customer Delete Request Received" doc:id="f0e4026c-d4d1-4215-9739-08c57ba02f07" message="Customer delete request received" />
+		<ee:transform doc:name="Transform Customer Delete Request To Order Request" doc:id="c9535ccc-de3b-45fb-b637-9737b550eafe" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    operation: "Delete",
+    data: [
+        {
+            employeeId: vars.customerId
+        }
+    ]
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Customer Delete Process Request" doc:id="2d10a885-a7b7-4915-a5e5-e403ec016f42" message="Submitting customer delete request to Process API" />
+		<http:request method="POST" doc:name="Submit Customer Delete Request To Process API" doc:id="e70796ec-36f4-4d2f-8ca4-eb2189b5386e" config-ref="process-api-http-request-config" path="/api/orders" />
+		<set-variable value="#[vars.customerId]" doc:name="Set Salesforce Employee ID" doc:id="0a7bfe4f-c041-43be-a430-fd98c0482732" variableName="employeeId" />
+		<flow-ref doc:name="Delete Employee From Salesforce" doc:id="5a6090d5-ac60-4011-81c4-1bc78e061405" name="xapi-delete-employee-salesforce-flow" />
+		<ee:transform doc:name="Transform Message" doc:id="7db1ebc0-147d-4c9c-ab56-a9991dfe58e7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    status: "ACCEPTED",
+    message: "Employee deletion request accepted",
+    employeeId: vars.customerId
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[202]" doc:name="Set Accepted HTTP Status" doc:id="2f1ad123-c6d0-409e-ad62-573bdc2a4971" variableName="httpStatus" />
+		<logger level="INFO" doc:name="Log Customer Delete Request Accepted" doc:id="33378307-0543-4f57-910e-c5312a94feaf" message="Customer delete request accepted for asynchronous processing" />
+	</flow>
+	<flow name="get:\customers:x-customer-sync-api-config" doc:id="2392c72d-ebeb-4ef2-8612-fc0b781afb95" >
+		<logger level="INFO" doc:name="Log Retrieve All Customers Request" doc:id="80954780-1d09-4c8b-a4cc-b9c7cfb0ebd9" message='#["Retrieve all customers request received"]' />
+		<http:request method="GET" doc:name="Retrieve All Customers From Process API" doc:id="37e18763-d6fe-49a2-ab76-c4d251e2b392" config-ref="process-api-http-request-config" path="/api/employees" />
+		<logger level="INFO" doc:name="Log Retrieve All Customers Response" doc:id="3e7f4d59-e846-4d99-a18e-306aaffd9b48" message='#["Retrieve all customers operation completed"&#10;            ++ " | recordCount=" ++ (sizeOf(payload) as String)]' />
+	</flow>
+	<flow name="get:\customers\(id):x-customer-sync-api-config" doc:id="f2824321-4c85-4b18-ab3e-e4476333b610" >
+		<set-variable value="#[attributes.uriParams.id as Number]" doc:name="Set Customer Identifier" doc:id="e4ed4e02-b35c-4e8d-8862-b0ab3e75d197" variableName="customerId" />
+		<logger level="INFO" doc:name="Log Retrieve Customer By Identifier Request" doc:id="67b49c0a-45a4-4a1c-b0ec-34d5d3633eb3" message="Retrieve customer by identifier request received" />
+		<http:request method="GET" doc:name="Retrieve Customer By Identifier From Process API" doc:id="399966af-8c44-40e2-829c-e21d428f8264" config-ref="process-api-http-request-config" path="#['/api/employees/' ++ (vars.customerId as String)]" />
+		<logger level="INFO" doc:name="Log Retrieve Customer By Identifier Response" doc:id="fc3d3fa2-94c9-45d3-8d79-25109a0b8fb6" message="Retrieve customer by identifier operation completed" />
+	</flow>
+	<flow name="post:\customers:application\json:x-customer-sync-api-config" doc:id="3f5dd3ba-1a6d-4149-8293-ae31251f681f" >
+		<set-variable value="#[payload]" doc:name="Store Employee Request" doc:id="8d0f4b67-050f-4a46-a393-9de96f83c370" variableName="employeeRequest" />
+		<flow-ref doc:name="Validate Employee Create Request" doc:id="b2ffaca1-4756-4b68-815f-eec5957f199c" name="validate-employee-create-request-flow" />
+		<flow-ref doc:name="Check Employee Duplicate" doc:id="8efffc77-5881-4540-9d6b-0dff7a8cff21" name="check-employee-duplicate-flow" />
+		<ee:transform doc:name="Transform Employee To Order Request" doc:id="930912e0-c60d-431a-a78d-3f0f4ee882f5" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    operation: "New",
+    data: [
+        {
+            employeeId: vars.employeeRequest.employeeId,
+            name: vars.employeeRequest.name,
+            address: vars.employeeRequest.address,
+            salary: vars.employeeRequest.salary
+        }
+    ]
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Submit Employee Create Order" doc:id="cc9fbfa3-79b0-4d20-af63-483dccbf450a" config-ref="process-api-http-request-config" path="/api/orders" />
+		<set-variable value="#[vars.employeeRequest.employeeId as Number]" doc:name="Set Salesforce Employee ID" doc:id="a1bbf55e-25a1-4e68-950b-8bfa4312a99e" variableName="employeeId" />
+		<flow-ref doc:name="Upsert Employee To Salesforce" doc:id="02bade4f-6946-4406-8253-407b77f40954" name="xapi-upsert-employee-salesforce-flow" />
+		<ee:transform doc:name="Employee Request for Processsing Successful" doc:id="afc01de2-691c-4ee0-9e84-c2e7218fb403" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    status: "ACCEPTED",
+    message: "Employee request submitted for processing",
+    employeeId: vars.employeeId
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[202]" doc:name="Set HTTP Status 20" doc:id="7355167b-6de5-4992-9ba5-0e00ff8ff682" variableName="httpStatus" />
+	</flow>
+</mule>
